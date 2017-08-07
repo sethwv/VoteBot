@@ -31,6 +31,10 @@ class Bot {
     static final String no = "341980112465559558";
     static final String veto = "342025850058702848";
 
+    static String imgurRefresh;
+    static String imgurClient;
+    static String imgurSecret;
+
     //arg 0 should always be the bot's token
     public static void main(String[] args){
 
@@ -39,6 +43,10 @@ class Bot {
         if (!imgcache.exists())
             if (!imgcache.mkdir())
                 System.out.println(imgcache.toString()+" could not be created. Does it already exist?");
+
+        imgurRefresh = args[1];
+        imgurClient = args[2];
+        imgurSecret = args[3];
 
         //initialise and connect with a new jda object. This object is literally the bot
         //only includes one listener "Listener" for all functions

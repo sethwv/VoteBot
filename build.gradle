@@ -40,5 +40,5 @@ dependencies {
     compile group: 'org.eclipse.jetty', name: 'jetty-servlets', version: '9.4.6.v20170531'
     compile group: 'org.eclipse.jetty', name: 'jetty-servlet', version: '9.4.6.v20170531'
     compile group: 'org.apache.httpcomponents', name: 'httpclient', version: '4.5'
-
+    compile group: 'com.mashape.unirest', name: 'unirest-java', version: '1.4.9'
 }

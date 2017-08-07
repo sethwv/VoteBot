@@ -1,5 +1,9 @@
 package net.swvn9.vote;
 
+import com.mashape.unirest.http.HttpResponse;
+import com.mashape.unirest.http.JsonNode;
+import com.mashape.unirest.http.Unirest;
+import com.mashape.unirest.http.exceptions.UnirestException;
 import net.dv8tion.jda.core.EmbedBuilder;
 import net.dv8tion.jda.core.entities.*;
 import net.dv8tion.jda.core.events.ReadyEvent;
@@ -8,6 +12,8 @@ import net.dv8tion.jda.core.hooks.ListenerAdapter;
 import net.dv8tion.jda.core.events.message.MessageReceivedEvent;
 
 import net.dv8tion.jda.core.events.message.react.GenericMessageReactionEvent;
+import org.apache.commons.lang3.StringUtils;
+import org.json.JSONObject;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
@@ -16,6 +22,7 @@ import java.nio.file.Files;
 import java.text.DecimalFormat;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.Scanner;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -112,9 +119,45 @@ class Listener extends ListenerAdapter {
 
     }
 
+    private static void postImage(String imageUrl,String subId,User user){
+        try {
+            HttpResponse<JsonNode> response = Unirest.post("https://api.imgur.com/oauth2/token")
+                    .header("content-type", "application/json")
+                    .header("cache-control", "no-cache")
+                    .body(new JSONObject()
+                            .put("refresh_token",imgurRefresh)
+                            .put("client_id",imgurClient)
+                            .put("client_secret",imgurSecret)
+                            .put("grant_type","refresh_token")
+                    )
+                    .asJson();
+
+            HttpResponse<JsonNode> result = Unirest.post("https://api.imgur.com/3/image")
+                    .header("Content-Type","application/json")
+                    .header("authorization", "Bearer "+response.getBody().getObject().getString("access_token"))
+                    .body(new JSONObject()
+                            .put("image", imageUrl)
+                            .put("description",user.getName()+"#"+user.getDiscriminator()+" ("+user.getId()+") @ "+ LocalDateTime.now().atZone(ZoneId.of("GMT")).format(DateTimeFormatter.ISO_DATE_TIME))
+                            .put("title","SUB#"+subId)
+                            .put("album", "TI5OI")
+                            .toString()
+                    )
+                    .asJson();
+
+        } catch (UnirestException e) {
+            sendException(e);
+        }
+    }
+
+
+    //the ready event, fires once the bot is up and running
     @Override
     public void onReady(ReadyEvent event) {
+
+        //set start to the current nanoTime
+        //used to calculate uptime later on
         Listener.start = System.nanoTime();
+
     }
 
     @Override
@@ -230,6 +273,13 @@ class Listener extends ListenerAdapter {
                     m.addReaction(jda.getEmoteById(no)).queue();
                     Listener.sessionEmotes++;
                 });
+                try {
+                    TimeUnit.SECONDS.sleep(3);
+                    Files.delete(sub.toPath());
+                } catch (Exception exx) {
+                    sendException(exx);
+                }
+                postImage(event.getMessage().getAttachments().get(0).getUrl(),formatted,event.getAuthor());
                 event.getMessage().delete().queue();
             } catch (Exception exx) {
                 sendException(exx);
