@@ -1,10 +1,7 @@
 package net.swvn9.vote;
 
 import net.dv8tion.jda.core.EmbedBuilder;
-import net.dv8tion.jda.core.entities.Emote;
-import net.dv8tion.jda.core.entities.Message;
-import net.dv8tion.jda.core.entities.MessageReaction;
-import net.dv8tion.jda.core.entities.Role;
+import net.dv8tion.jda.core.entities.*;
 import net.dv8tion.jda.core.events.ReadyEvent;
 import net.dv8tion.jda.core.hooks.ListenerAdapter;
 
@@ -18,15 +15,14 @@ import org.omg.PortableInterceptor.SYSTEM_EXCEPTION;
 import javax.imageio.ImageIO;
 import java.awt.*;
 import java.awt.image.BufferedImage;
-import java.io.File;
-import java.io.FileReader;
-import java.io.FileWriter;
+import java.io.*;
 import java.nio.file.Files;
 import java.text.DecimalFormat;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Scanner;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import static net.swvn9.vote.Bot.*;
 
@@ -117,16 +113,15 @@ public class Listener extends ListenerAdapter {
                     if (minutes != 0) uptimeString.append(minutes).append("m ");
                     if (seconds != 0) uptimeString.append(seconds).append("s");
                     stats.addField("Uptime", "" + uptimeString.toString() + "", false);
-                    //stats.addField("Submissions",sessionEmotes+"",true);
                     stats.setColor(event.getGuild().getMember(jda.getSelfUser()).getColor());
                     try{
                         int count = -1;
                         FileReader read = new FileReader(new File(imgcache+File.separator+"count.txt"));
                         Scanner re = new Scanner(read);
                         count = re.nextInt();
-                        stats.addField("Submission Stats","`All-Time\t\t"+count+"`\n"+"`Session \t\t"+sessionEmotes+"`\n"+"`Waiting \t\t"+(event.getGuild().getTextChannelById(approval).getIterableHistory().complete().size()-1)+"`",true);
+                        stats.addField("Submission Stats","`All-Time\t\t"+count+"`\n"+"`Session \t\t"+sessionEmotes+"`\n"+"`Waiting \t\t"+(event.getGuild().getTextChannelById(approval).getIterableHistory().complete().stream().filter(c->c.getAuthor().isBot()).collect(Collectors.toList()).size())+"`",true);
                     } catch (Exception ignored){}
-                    stats.addField("\u200B","`Accepted\t\t"+event.getGuild().getTextChannelById(queue).getIterableHistory().complete().size()+"`\n"+"`Rejected\t\t"+event.getGuild().getTextChannelById(rejected).getIterableHistory().complete().size()+"`\n"+"`In Queue\t\t"+(event.getGuild().getTextChannelById(voting).getIterableHistory().complete().size()-1)+"`",true);
+                    stats.addField("\u200B","`Accepted\t\t"+event.getGuild().getTextChannelById(queue).getIterableHistory().complete().stream().filter(c->c.getAuthor().isBot()).collect(Collectors.toList()).size()+"`\n"+"`Rejected\t\t"+event.getGuild().getTextChannelById(rejected).getIterableHistory().complete().stream().filter(c->c.getAuthor().isBot()).collect(Collectors.toList()).size()+"`\n"+"`In Queue\t\t"+(event.getGuild().getTextChannelById(voting).getIterableHistory().complete().stream().filter(c->c.getAuthor().isBot()).collect(Collectors.toList()).size())+"`",true);
                     stats.addField("Vote Threshold", "`"+(int)((jda.getGuildById("335535819152687105").getMembers().size()*getMasterThresh())+1) + " Votes (public voting)` \n`("+((df.format(jda.getGuildById("335535819152687105").getMembers().size()*getMasterThresh()+1)))+") ("+(int)(getMasterThresh()*100)+"% of Guild)`\n` "+aThresh+" Votes (board voting)`", true);
                     stats.setTimestamp(LocalDateTime.now(ZoneId.of("GMT")));
                     event.getChannel().sendMessage(stats.build()).queue();
@@ -160,7 +155,16 @@ public class Listener extends ListenerAdapter {
                         try{
                             TimeUnit.SECONDS.sleep(3);
                             Files.delete(sub.toPath());
-                        }catch(Exception exx){exx.printStackTrace();jda.getTextChannelById(debug).sendMessageFormat("```java\n%s\n```",exx).queue();}
+                        }catch(Exception exx){
+                            try{
+                                Files.delete(sub.toPath());
+                            } catch (Exception ignored){}
+                            StringWriter sw = new StringWriter();
+                            exx.printStackTrace(new PrintWriter(sw));
+                            String exceptionAsString = sw.toString();
+                            jda.getTextChannelById(debug).sendMessageFormat("```java\n%s\n```",exceptionAsString).queue();
+                            event.getMessage().delete().queue();
+                        }
                     });
                     return;
                 }
@@ -172,7 +176,15 @@ public class Listener extends ListenerAdapter {
                     try{
                         TimeUnit.SECONDS.sleep(3);
                         Files.delete(sub.toPath());
-                    }catch(Exception exx){exx.printStackTrace();jda.getTextChannelById(debug).sendMessageFormat("```java\n%s\n```",exx).queue();}
+                    }catch(Exception exx){
+                        exx.printStackTrace();
+                        StringWriter sw = new StringWriter();
+                        exx.printStackTrace(new PrintWriter(sw));
+                        String exceptionAsString = sw.toString();
+                        jda.getTextChannelById(debug).sendMessageFormat("```java\n%s\n```",exceptionAsString).queue();
+                        event.getMessage().delete().queue();
+                        Files.delete(sub.toPath());
+                    }
                     return;
                 }
 
@@ -183,8 +195,14 @@ public class Listener extends ListenerAdapter {
                 });
                 event.getMessage().delete().queue();
             } catch (Exception ex){
-                jda.getTextChannelById(debug).sendMessageFormat("```java\n%s\n```",ex).queue();
                 ex.printStackTrace();
+                StringWriter sw = new StringWriter();
+                ex.printStackTrace(new PrintWriter(sw));
+                String exceptionAsString = sw.toString();
+                jda.getTextChannelById(debug).sendMessageFormat("```java\n%s\n```",exceptionAsString).queue();
+                ex.printStackTrace();
+                event.getMessage().delete().queue();
+
             }
         }
     }
@@ -224,7 +242,11 @@ public class Listener extends ListenerAdapter {
                             m.addReaction(jda.getEmoteById(no)).queue();
                             try{
                                 Files.delete(sub.toPath());
-                            }catch(Exception exx){exx.printStackTrace();}
+                            }catch(Exception exx){
+                                StringWriter sw = new StringWriter();
+                                exx.printStackTrace(new PrintWriter(sw));
+                                String exceptionAsString = sw.toString();
+                                jda.getTextChannelById(debug).sendMessageFormat("```java\n%s\n```",exceptionAsString).queue();}
                         });
                         message.delete().queue();
                     }
@@ -235,7 +257,11 @@ public class Listener extends ListenerAdapter {
                         jda.getTextChannelById(rejected).sendMessage(message.getContentRaw().replace("<@&336395133975003138> must approve or deny this submission.","This emote was rejected in <#341975342829010945>.")).addFile(sub).queue(m->{
                             try{
                                 Files.delete(sub.toPath());
-                            }catch(Exception exx){exx.printStackTrace();}
+                            }catch(Exception exx){
+                                StringWriter sw = new StringWriter();
+                                exx.printStackTrace(new PrintWriter(sw));
+                                String exceptionAsString = sw.toString();
+                                jda.getTextChannelById(debug).sendMessageFormat("```java\n%s\n```",exceptionAsString).queue();}
                         });
                         message.delete().queue();
                     }
@@ -247,7 +273,11 @@ public class Listener extends ListenerAdapter {
                             jda.getTextChannelById(rejected).sendMessage(message.getContentRaw().replace("<@&336395133975003138> must approve or deny this submission.","This emote was vetoed in <#341975342829010945> by "+event.getMember().getAsMention())).addFile(sub).queue(m->{
                                 try{
                                     Files.delete(sub.toPath());
-                                }catch(Exception exx){exx.printStackTrace();}
+                                }catch(Exception exx){
+                                    StringWriter sw = new StringWriter();
+                                    exx.printStackTrace(new PrintWriter(sw));
+                                    String exceptionAsString = sw.toString();
+                                    jda.getTextChannelById(debug).sendMessageFormat("```java\n%s\n```",exceptionAsString).queue();}
                             });
                             message.delete().queue();
                         }
@@ -268,7 +298,11 @@ public class Listener extends ListenerAdapter {
                         jda.getTextChannelById(queue).sendMessage(message.getContentRaw().replace("Vote with <:Yea:341980112704634880> and <:Nay:341980112465559558>","This emote has been voted in!")).addFile(sub).queue(m->{
                             try{
                                 Files.delete(sub.toPath());
-                            }catch(Exception exx){exx.printStackTrace();}
+                            }catch(Exception exx){
+                                StringWriter sw = new StringWriter();
+                                exx.printStackTrace(new PrintWriter(sw));
+                                String exceptionAsString = sw.toString();
+                                jda.getTextChannelById(debug).sendMessageFormat("```java\n%s\n```",exceptionAsString).queue();}
                         });
                         message.delete().queue();
                     }
@@ -279,7 +313,11 @@ public class Listener extends ListenerAdapter {
                         jda.getTextChannelById(rejected).sendMessage(message.getContentRaw().replace("Vote with <:Yea:341980112704634880> and <:Nay:341980112465559558>","This emote was rejected in <#341732684801769474>.")).addFile(sub).queue(m->{
                             try{
                                 Files.delete(sub.toPath());
-                            }catch(Exception exx){exx.printStackTrace();}
+                            }catch(Exception exx){
+                                StringWriter sw = new StringWriter();
+                                exx.printStackTrace(new PrintWriter(sw));
+                                String exceptionAsString = sw.toString();
+                                jda.getTextChannelById(debug).sendMessageFormat("```java\n%s\n```",exceptionAsString).queue();}
                         });
                         message.delete().queue();
                     }
@@ -291,7 +329,11 @@ public class Listener extends ListenerAdapter {
                             jda.getTextChannelById(rejected).sendMessage(message.getContentRaw().replace("Vote with <:Yea:341980112704634880> and <:Nay:341980112465559558>","This emote was vetoed in <#341732684801769474> by "+event.getMember().getAsMention())).addFile(sub).queue(m->{
                                 try{
                                     Files.delete(sub.toPath());
-                                }catch(Exception exx){exx.printStackTrace();}
+                                }catch(Exception exx){
+                                    StringWriter sw = new StringWriter();
+                                    exx.printStackTrace(new PrintWriter(sw));
+                                    String exceptionAsString = sw.toString();
+                                    jda.getTextChannelById(debug).sendMessageFormat("```java\n%s\n```",exceptionAsString).queue();}
                             });
                             message.delete().queue();
                         }
