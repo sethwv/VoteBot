@@ -10,13 +10,3 @@ build/tmp/shadowJar/
 build/libs/
 
 build/classes/main/net/swvn9/vote/
-
-\.idea/
-
-\.gradle/3\.5-rc-2/taskHistory/
-
-\.gradle/buildOutputCleanup/
-
-\.gradle/3\.5-rc-2/fileContent/
-
-\.gradle/3\.5-rc-2/file-changes/
