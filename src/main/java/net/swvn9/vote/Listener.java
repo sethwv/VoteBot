@@ -3,16 +3,14 @@ package net.swvn9.vote;
 import com.mashape.unirest.http.HttpResponse;
 import com.mashape.unirest.http.JsonNode;
 import com.mashape.unirest.http.Unirest;
-import com.mashape.unirest.http.exceptions.UnirestException;
 import net.dv8tion.jda.core.EmbedBuilder;
+import net.dv8tion.jda.core.Permission;
 import net.dv8tion.jda.core.entities.*;
 import net.dv8tion.jda.core.events.ReadyEvent;
-import net.dv8tion.jda.core.hooks.ListenerAdapter;
-
 import net.dv8tion.jda.core.events.message.MessageReceivedEvent;
-
 import net.dv8tion.jda.core.events.message.react.GenericMessageReactionEvent;
-import org.apache.commons.lang3.StringUtils;
+import net.dv8tion.jda.core.exceptions.RateLimitedException;
+import net.dv8tion.jda.core.hooks.ListenerAdapter;
 import org.json.JSONObject;
 
 import javax.imageio.ImageIO;
@@ -20,11 +18,15 @@ import java.awt.image.BufferedImage;
 import java.io.*;
 import java.nio.file.Files;
 import java.text.DecimalFormat;
+import java.text.SimpleDateFormat;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 import java.util.Scanner;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import static net.swvn9.vote.Bot.*;
@@ -119,7 +121,7 @@ class Listener extends ListenerAdapter {
 
     }
 
-    private static void postImage(String imageUrl,String subId,User user){
+    private static String postImageUrl(String imageUrl,String subId,User user){
         try {
             HttpResponse<JsonNode> response = Unirest.post("https://api.imgur.com/oauth2/token")
                     .header("content-type", "application/json")
@@ -143,10 +145,46 @@ class Listener extends ListenerAdapter {
                             .toString()
                     )
                     .asJson();
-
-        } catch (UnirestException e) {
+            //return "link disabled";
+            return result.getBody().getObject().getJSONObject("data").getString("link");
+        } catch (Exception e) {
             sendException(e);
+            return "nope.avi";
         }
+    }
+
+    private static void logToChannel(String s){
+        TextChannel channel = Bot.jda.getTextChannelById(log);
+        SimpleDateFormat format = new SimpleDateFormat("kk:mm:ss");
+        channel.sendMessageFormat("`[%s] %s`",LocalDateTime.now().atZone(ZoneId.of("GMT")).format(DateTimeFormatter.ofPattern(format.toPattern())),s).queue();
+    }
+
+    private static void lockUnlock(){
+        int count = Bot.jda.getTextChannelById(approval).getIterableHistory().complete().stream().filter(c -> c.getAuthor().isBot()).collect(Collectors.toList()).size();
+        //System.out.println(count);
+            if(count<10) {
+                //System.out.println("unlocked");
+                //Bot.jda.getTextChannelById(submission).getPermissionOverride(Bot.jda.getRoleById("335535819152687105")).getManager().grant(Permission.MESSAGE_WRITE).queue();
+                Bot.jda.getTextChannelById(submission).editMessageById("344547049624305666","<:Yea:341980112704634880>Submissions are **Open**").queue();
+                Bot.jda.getTextChannelById(submission).getPermissionOverride(Bot.jda.getRoleById(335535819152687105L)).getManager().grant(Permission.MESSAGE_WRITE).reason(Bot.jda.getTextChannelById(approval).getName()+" is under capacity, unlocking "+Bot.jda.getTextChannelById(submission).getName()).queue();
+            }else {
+                Bot.jda.getTextChannelById(submission).getPermissionOverride(Bot.jda.getRoleById(335535819152687105L)).getManager().deny(Permission.MESSAGE_WRITE).reason(Bot.jda.getTextChannelById(approval).getName()+" is over capacity, locking "+Bot.jda.getTextChannelById(submission).getName()).queue();
+                //System.out.println("locked");
+                //Bot.jda.getTextChannelById(submission).getPermissionOverride(Bot.jda.getRoleById("335535819152687105")).getManager().deny(Permission.MESSAGE_WRITE).queue();
+                List<Message> messages = null;
+                try {
+                    messages = Bot.jda.getTextChannelById(approval).getIterableHistory().complete(false).stream().filter(c -> c.getAuthor().getId().equals("111592329424470016")).collect(Collectors.toList());
+                } catch (RateLimitedException e) {
+                    e.printStackTrace();
+                }
+                assert messages != null;
+                if(messages.size()>1) try {
+                    Bot.jda.getTextChannelById(submission).deleteMessages(messages).complete(false);
+                } catch (RateLimitedException e) {
+                    sendException(e);
+                }
+                Bot.jda.getTextChannelById(submission).editMessageById("344547049624305666","<:Nay:341980112465559558>Submissions are **Closed**\n\n<#341975342829010945> is currently full of submissions, we're working through the current load and the channel will automatically unlock when we have space for more!\n*(We need to work through about "+(count-9)+" more submission(s) before we'll have space. Hang tight!)*").queue();
+            }
     }
 
 
@@ -279,8 +317,10 @@ class Listener extends ListenerAdapter {
                 } catch (Exception exx) {
                     sendException(exx);
                 }
-                postImage(event.getMessage().getAttachments().get(0).getUrl(),formatted,event.getAuthor());
+                logToChannel("SUB#"+formatted+" added by "+event.getAuthor().getName()+"#"+event.getAuthor().getDiscriminator()+"("+event.getAuthor().getId()+") - "+postImageUrl((event.getMessage().getAttachments().get(0).getUrl()),formatted,event.getAuthor()));
+                //postImage(event.getMessage().getAttachments().get(0).getUrl(),formatted,event.getAuthor());
                 event.getMessage().delete().queue();
+                lockUnlock();
             } catch (Exception exx) {
                 sendException(exx);
             }
@@ -310,6 +350,9 @@ class Listener extends ListenerAdapter {
                 }
                 if (event.getReactionEmote().getEmote().equals(yea)) {
                     if (yeacount >= aThresh) {
+                        Pattern id = Pattern.compile("SUB#(\\d{4})");
+                        Matcher idFind = id.matcher(message.getContentRaw());
+                        while(idFind.find()) logToChannel(idFind.group(0)+" approved in "+jda.getTextChannelById(approval).getName());
                         File sub = new File(imgcache + File.separator + message.getId() + ".png");
                         message.getAttachments().get(0).download(sub);
                         jda.getTextChannelById(voting).sendMessage(message.getContentRaw().replace("<@&336395133975003138> must approve or deny this submission.", "Vote with <:Yea:341980112704634880> and <:Nay:341980112465559558>")).addFile(sub).queue(m -> {
@@ -322,9 +365,13 @@ class Listener extends ListenerAdapter {
                             }
                         });
                         message.delete().queue();
+                        lockUnlock();
                     }
                 } else if (event.getReactionEmote().getEmote().equals(nay)) {
                     if (naycount >= aThresh) {
+                        Pattern id = Pattern.compile("SUB#(\\d{4})");
+                        Matcher idFind = id.matcher(message.getContentRaw());
+                        while(idFind.find()) logToChannel(idFind.group(0)+" denied in "+jda.getTextChannelById(approval).getName());
                         File sub = new File(imgcache + File.separator + message.getId() + ".png");
                         message.getAttachments().get(0).download(sub);
                         jda.getTextChannelById(rejected).sendMessage(message.getContentRaw().replace("<@&336395133975003138> must approve or deny this submission.", "This emote was rejected in <#341975342829010945>.")).addFile(sub).queue(m -> {
@@ -335,10 +382,14 @@ class Listener extends ListenerAdapter {
                             }
                         });
                         message.delete().queue();
+                        lockUnlock();
                     }
                 } else if (event.getReactionEmote().getEmote().equals(blk)) {
                     for (Role r : event.getMember().getRoles()) {
                         if (r.getId().equals("337624653797261313")) {
+                            Pattern id = Pattern.compile("SUB#(\\d{4})");
+                            Matcher idFind = id.matcher(message.getContentRaw());
+                            while(idFind.find()) logToChannel(idFind.group(0)+" vetoed in "+jda.getTextChannelById(approval).getName()+" by "+event.getMember().getEffectiveName());
                             File sub = new File(imgcache + File.separator + message.getId() + ".png");
                             message.getAttachments().get(0).download(sub);
                             jda.getTextChannelById(rejected).sendMessage(message.getContentRaw().replace("<@&336395133975003138> must approve or deny this submission.", "This emote was vetoed in <#341975342829010945> by " + event.getMember().getAsMention())).addFile(sub).queue(m -> {
@@ -349,6 +400,7 @@ class Listener extends ListenerAdapter {
                                 }
                             });
                             message.delete().queue();
+                            lockUnlock();
                         }
                     }
                 }
@@ -362,6 +414,9 @@ class Listener extends ListenerAdapter {
                 }
                 if (event.getReactionEmote().getEmote().equals(yea)) {
                     if (yeacount >= vThresh) {
+                        Pattern id = Pattern.compile("SUB#(\\d{4})");
+                        Matcher idFind = id.matcher(message.getContentRaw());
+                        while(idFind.find()) logToChannel(idFind.group(0)+" approved in "+jda.getTextChannelById(voting).getName());
                         File sub = new File(imgcache + File.separator + message.getId() + ".png");
                         message.getAttachments().get(0).download(sub);
                         jda.getTextChannelById(queue).sendMessage(message.getContentRaw().replace("Vote with <:Yea:341980112704634880> and <:Nay:341980112465559558>", "This emote has been voted in!")).addFile(sub).queue(m -> {
@@ -372,9 +427,13 @@ class Listener extends ListenerAdapter {
                             }
                         });
                         message.delete().queue();
+                        lockUnlock();
                     }
                 } else if (event.getReactionEmote().getEmote().equals(nay)) {
                     if (naycount >= vThresh) {
+                        Pattern id = Pattern.compile("SUB#(\\d{4})");
+                        Matcher idFind = id.matcher(message.getContentRaw());
+                        while(idFind.find()) logToChannel(idFind.group(0)+" denied in "+jda.getTextChannelById(voting).getName());
                         File sub = new File(imgcache + File.separator + message.getId() + ".png");
                         message.getAttachments().get(0).download(sub);
                         jda.getTextChannelById(rejected).sendMessage(message.getContentRaw().replace("Vote with <:Yea:341980112704634880> and <:Nay:341980112465559558>", "This emote was rejected in <#341732684801769474>.")).addFile(sub).queue(m -> {
@@ -389,6 +448,9 @@ class Listener extends ListenerAdapter {
                 } else if (event.getReactionEmote().getEmote().equals(blk)) {
                     for (Role r : event.getMember().getRoles()) {
                         if (r.getId().equals("337624653797261313")) {
+                            Pattern id = Pattern.compile("SUB#(\\d{4})");
+                            Matcher idFind = id.matcher(message.getContentRaw());
+                            while(idFind.find()) logToChannel(idFind.group(0)+" vetoed in "+jda.getTextChannelById(voting).getName()+" by "+event.getMember().getEffectiveName());
                             File sub = new File(imgcache + File.separator + message.getId() + ".png");
                             message.getAttachments().get(0).download(sub);
                             jda.getTextChannelById(rejected).sendMessage(message.getContentRaw().replace("Vote with <:Yea:341980112704634880> and <:Nay:341980112465559558>", "This emote was vetoed in <#341732684801769474> by " + event.getMember().getAsMention())).addFile(sub).queue(m -> {

@@ -24,6 +24,7 @@ class Bot {
     static final String queue = "341975553819279360";
     static final String rejected = "342013506041937921";
     static final String debug = "341980399628451840";
+    static final String log = "344522457878888449";
 
     //emote/reactions that the bot uses for voting
     //again, the bot needs them to function
