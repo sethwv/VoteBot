@@ -4,6 +4,7 @@ import com.mashape.unirest.http.HttpResponse;
 import com.mashape.unirest.http.JsonNode;
 import com.mashape.unirest.http.Unirest;
 import net.dv8tion.jda.core.EmbedBuilder;
+import net.dv8tion.jda.core.OnlineStatus;
 import net.dv8tion.jda.core.Permission;
 import net.dv8tion.jda.core.entities.*;
 import net.dv8tion.jda.core.events.ReadyEvent;
@@ -44,6 +45,8 @@ class Listener extends ListenerAdapter {
     private static int sessionEmotes;
     //the master threshold for emote voting. PERCENT .10 == 10%
     private static double masterThresh = 0.10;
+
+    private static Boolean manual = false;
 
     //send an exception to the debug channel
     private static void sendException(Exception exx) {
@@ -121,8 +124,14 @@ class Listener extends ListenerAdapter {
 
     }
 
+    //send a POST request to the imgur API and return a url
     private static String postImageUrl(String imageUrl,String subId,User user){
+
         try {
+
+            //request a token from the imgur API
+            //(They expire pretty quick, who knew)
+            //also the way postman gives sample code is crap, so use json format
             HttpResponse<JsonNode> response = Unirest.post("https://api.imgur.com/oauth2/token")
                     .header("content-type", "application/json")
                     .header("cache-control", "no-cache")
@@ -134,6 +143,7 @@ class Listener extends ListenerAdapter {
                     )
                     .asJson();
 
+            //request to POST the image and add it to the specific album
             HttpResponse<JsonNode> result = Unirest.post("https://api.imgur.com/3/image")
                     .header("Content-Type","application/json")
                     .header("authorization", "Bearer "+response.getBody().getObject().getString("access_token"))
@@ -145,46 +155,147 @@ class Listener extends ListenerAdapter {
                             .toString()
                     )
                     .asJson();
-            //return "link disabled";
+
+            //return the link to the image
             return result.getBody().getObject().getJSONObject("data").getString("link");
+
         } catch (Exception e) {
+
+            //something obviously went wrong. At the time of writing the link is only
+            //used in logging.
             sendException(e);
             return "nope.avi";
+
         }
+
     }
 
+    private static String getName(String s){
+        Pattern newName = Pattern.compile("(?=.{7,25}$):([a-zA-Z0-9]*[A-Z]+[a-zA-Z0-9]*):");
+        Matcher match = newName.matcher(s);
+        if(match.find()) return "\nwith the name **"+match.group(1)+"**";
+        return "";
+    }
+
+    //log to the defined logs channel in net.swvn9.Bot
     private static void logToChannel(String s){
+
+        //the text channel id converted to an actual channel
         TextChannel channel = Bot.jda.getTextChannelById(log);
+
+        //new format for how the time should appear in logs
         SimpleDateFormat format = new SimpleDateFormat("kk:mm:ss");
+
+        //do everything else in one step. Apply timestamps in GMT, and the supplied message
         channel.sendMessageFormat("`[%s] %s`",LocalDateTime.now().atZone(ZoneId.of("GMT")).format(DateTimeFormatter.ofPattern(format.toPattern())),s).queue();
+
     }
 
+    private static void manLockUnlock(String s,String r){
+
+        if(Bot.jda.getTextChannelById(submission).getPermissionOverride(Bot.jda.getRoleById("335535819152687105")).getAllowed().contains(Permission.MESSAGE_WRITE)){
+            if(!Bot.jda.getPresence().getStatus().equals(OnlineStatus.DO_NOT_DISTURB)){
+                Bot.jda.getPresence().setStatus(OnlineStatus.DO_NOT_DISTURB);
+                //Bot.jda.getPresence().setGame(Game.of("Submissions Closed"));
+            }
+
+            Bot.jda.getTextChannelById(submission).editMessageById("345768231576797184","<:Nay:341980112465559558>Submissions are **Closed** \n\n"+r).queue();
+            Bot.jda.getTextChannelById(submission).getPermissionOverride(Bot.jda.getRoleById("335535819152687105"))
+                    .getManager()
+                    .deny(Permission.MESSAGE_WRITE)
+                    .reason("#"+Bot.jda.getTextChannelById(approval).getName()+" manually locked by "+s+" with reason: "+r).queue();
+            Listener.manual = true;
+
+            List<Message> messages = null;
+            try {
+                messages = Bot.jda.getTextChannelById(submission).getIterableHistory().complete(false).stream()
+                        .filter(c -> !c.getAuthor().getId().equals("111592329424470016"))
+                        .filter(c -> !c.getAuthor().getId().equals("341971835086176257"))
+                        .collect(Collectors.toList());
+            } catch (RateLimitedException e) {
+                e.printStackTrace();
+            }
+            assert messages != null;
+            if(messages.size()>1) try {
+                Bot.jda.getTextChannelById(submission).deleteMessages(messages).complete(false);
+            } catch (Exception e) {
+                sendException(e);
+            }
+
+        } else {
+            if(!Bot.jda.getPresence().getStatus().equals(OnlineStatus.ONLINE)) {
+                Bot.jda.getPresence().setStatus(OnlineStatus.ONLINE);
+                //Bot.jda.getPresence().setGame(null);
+            }
+
+            Bot.jda.getTextChannelById(submission).editMessageById("345768231576797184","<:Yea:341980112704634880>Submissions are **Open**").queue();
+            Bot.jda.getTextChannelById(submission).getPermissionOverride(Bot.jda.getRoleById("335535819152687105"))
+                    .getManager()
+                    .grant(Permission.MESSAGE_WRITE)
+                    .reason("#"+Bot.jda.getTextChannelById(submission).getName()+" manually unlocked by "+s).queue();
+            Listener.manual = false;
+
+        }
+
+    }
+
+
+    //lock and unlock the submission channel depending on how many
+    //pending submissions exist. Prevents too much spam
     private static void lockUnlock(){
-        int count = Bot.jda.getTextChannelById(approval).getIterableHistory().complete().stream().filter(c -> c.getAuthor().isBot()).collect(Collectors.toList()).size();
-        //System.out.println(count);
-            if(count<10) {
-                //System.out.println("unlocked");
-                //Bot.jda.getTextChannelById(submission).getPermissionOverride(Bot.jda.getRoleById("335535819152687105")).getManager().grant(Permission.MESSAGE_WRITE).queue();
-                Bot.jda.getTextChannelById(submission).editMessageById("344547049624305666","<:Yea:341980112704634880>Submissions are **Open**").queue();
-                Bot.jda.getTextChannelById(submission).getPermissionOverride(Bot.jda.getRoleById(335535819152687105L)).getManager().grant(Permission.MESSAGE_WRITE).reason(Bot.jda.getTextChannelById(approval).getName()+" is under capacity, unlocking "+Bot.jda.getTextChannelById(submission).getName()).queue();
+
+        //Check if the channel has been manually locked
+        if(!manual){
+
+            //The number of submissions before locking
+            int channelMax = 10;
+
+            //count the number of pending submissions in the approval queue
+            int count = Bot.jda.getTextChannelById(approval).getIterableHistory().complete().stream().filter(c -> c.getAuthor().isBot()).collect(Collectors.toList()).size();
+
+            //
+            if(count<channelMax) {
+                if(!Bot.jda.getPresence().getStatus().equals(OnlineStatus.ONLINE)) {
+                    Bot.jda.getPresence().setStatus(OnlineStatus.ONLINE);
+                    //Bot.jda.getPresence().setGame(null);
+                }
+
+                Bot.jda.getTextChannelById(submission).editMessageById("345768231576797184","<:Yea:341980112704634880>Submissions are **Open**").queue();
+                Bot.jda.getTextChannelById(submission).getPermissionOverride(Bot.jda.getRoleById("335535819152687105"))
+                        .getManager()
+                        .grant(Permission.MESSAGE_WRITE)
+                        .reason("#"+Bot.jda.getTextChannelById(approval).getName()+" is under capacity, unlocking #"+Bot.jda.getTextChannelById(submission).getName()).queue();
             }else {
-                Bot.jda.getTextChannelById(submission).getPermissionOverride(Bot.jda.getRoleById(335535819152687105L)).getManager().deny(Permission.MESSAGE_WRITE).reason(Bot.jda.getTextChannelById(approval).getName()+" is over capacity, locking "+Bot.jda.getTextChannelById(submission).getName()).queue();
-                //System.out.println("locked");
-                //Bot.jda.getTextChannelById(submission).getPermissionOverride(Bot.jda.getRoleById("335535819152687105")).getManager().deny(Permission.MESSAGE_WRITE).queue();
+                if(!Bot.jda.getPresence().getStatus().equals(OnlineStatus.DO_NOT_DISTURB)){
+                    Bot.jda.getPresence().setStatus(OnlineStatus.DO_NOT_DISTURB);
+                    //Bot.jda.getPresence().setGame(Game.of("Submissions Closed"));
+                }
+
+
+                Bot.jda.getTextChannelById(submission).getPermissionOverride(Bot.jda.getRoleById("335535819152687105"))
+                        .getManager()
+                        .deny(Permission.MESSAGE_WRITE)
+                        .reason("#"+Bot.jda.getTextChannelById(approval).getName()+" is over capacity, locking #"+Bot.jda.getTextChannelById(submission).getName()).queue();
                 List<Message> messages = null;
                 try {
-                    messages = Bot.jda.getTextChannelById(approval).getIterableHistory().complete(false).stream().filter(c -> c.getAuthor().getId().equals("111592329424470016")).collect(Collectors.toList());
+                    messages = Bot.jda.getTextChannelById(submission).getIterableHistory().complete(false).stream()
+                            .filter(c -> !c.getAuthor().getId().equals("111592329424470016"))
+                            .filter(c -> !c.getAuthor().getId().equals("341971835086176257"))
+                            .collect(Collectors.toList());
                 } catch (RateLimitedException e) {
                     e.printStackTrace();
                 }
                 assert messages != null;
                 if(messages.size()>1) try {
                     Bot.jda.getTextChannelById(submission).deleteMessages(messages).complete(false);
-                } catch (RateLimitedException e) {
+                } catch (Exception e) {
                     sendException(e);
                 }
-                Bot.jda.getTextChannelById(submission).editMessageById("344547049624305666","<:Nay:341980112465559558>Submissions are **Closed**\n\n<#341975342829010945> is currently full of submissions, we're working through the current load and the channel will automatically unlock when we have space for more!\n*(We need to work through about "+(count-9)+" more submission(s) before we'll have space. Hang tight!)*").queue();
+                Bot.jda.getTextChannelById(submission).editMessageById("345768231576797184","<:Nay:341980112465559558>Submissions are **Closed**\n\n<#341975342829010945> is currently full of submissions, we're working through the current load and the channel will automatically unlock when we have space for more!\n*(We need to work through about "+(count-(channelMax-1))+" more submission(s) before we'll have space. Hang tight!)*").queue();
             }
+
+        }
+
     }
 
 
@@ -211,6 +322,47 @@ class Listener extends ListenerAdapter {
                     help.setColor(event.getGuild().getMember(jda.getSelfUser()).getColor());
                     help.setTimestamp(LocalDateTime.now(ZoneId.of("GMT")));
                     event.getChannel().sendMessage(help.build()).queue();
+                    event.getMessage().delete().queue();
+                    return;
+                }
+            }
+        }
+        if (event.getMessage().getContentRaw().equals("--s")) {
+            if(event.getAuthor().getId().equals("111592329424470016")){
+                event.getMessage().delete().queue();
+                event.getChannel().sendFile(new File(imgcache+File.separator+"submheading.png"),null).queue();
+                event.getChannel().sendMessage("Welcome to <#341979061553463306>! This is the place to submit all of your beautiful emotes that you want to become global.\n\n" +
+                        "**Upload your Image**\n" +
+                        "All you need to do is upload your image in <#341979061553463306>. The bot will grab it and begin the submission process! the bot supports the following file extentions: **png**,**bmp**,**gif**\n" +
+                        "\n**Name your Emote**(Optional)\n" +
+                        "This part is optional, but if you are so inclined you may include a name for the emote you are submitting. This can be done by making the content of the message containing your image your desired name, surrounded by `:`s\n" +
+                        "Names must be at least 5 characters long, and contain one capital, if the name doesn't meet the requirements, the bot will ignore it.\n" +
+                        "<:Yea:341980112704634880>`:emoteName:`\t" +
+                        "<:Nay:341980112465559558>`:emotename:`\t" +
+                        "<:Nay:341980112465559558>`:emote:`\t" +
+                        "<:Nay:341980112465559558>`emotename`\n").addFile(new File(imgcache+File.separator+"rulesheading.png")).queueAfter(2,TimeUnit.SECONDS);
+                event.getChannel().sendMessage("`1.` Your emote **must not** violate our guild rules, or the Discord TOS\n" +
+                        "`2.` All submissions must be **512**x**512** at the largest, any larger is unnessicary and will be automatically denied.\n" +
+                        "`3.` All submissions must have a transparent background. The bot will usually catch this.\n" +
+                        "`4.` You require **full legal permission** to use the image, and must follow one or more of the following:\n" +
+                        "`a.` You are the original creator of the submitted image\n" +
+                        "`b.` You have a transferrable license to use the image\n" +
+                        "`c.` You have (and in turn we) have explicit permission from the creator\n" +
+                        "`d.` The image is public domain\n" +
+                        "\nIf your submission breaks any of these, The <@&336395133975003138> will deny it, and report if nessecary.\n" +
+                        "Repeated ignorance of our rules will result in a kick/ban/blacklist at the discretion of the staff.").addFile(new File(imgcache+File.separator+"statusheading.png")).queueAfter(4,TimeUnit.SECONDS);
+                event.getChannel().sendMessage("FOR SOME REASON THE BOT ISN'T EDITING THIS MESSAGE. IT SHOULD CONTAIN THE CURRENT SUBMISSION STATUS").queueAfter(6,TimeUnit.SECONDS);
+            }
+        }
+
+        if (event.getMessage().getContentRaw().toLowerCase().startsWith("--l")) {
+            for (Role r : event.getMember().getRoles()) {
+                if (r.getId().equals("337624653797261313")||r.getId().equals("336395133975003138")) {
+                    if(!event.getMessage().getContentRaw().replaceFirst("(?i)--l","").trim().equals("")){
+                        manLockUnlock(event.getMember().getEffectiveName(),event.getMessage().getContentRaw().replaceFirst("(?i)--l","").trim());
+                    } else {
+                        manLockUnlock(event.getMember().getEffectiveName(),"**<#341979061553463306> has been manually locked and will remain so until unlocked by a staff member.**");
+                    }
                     event.getMessage().delete().queue();
                     return;
                 }
@@ -306,7 +458,7 @@ class Listener extends ListenerAdapter {
                     }
                     return;
                 }
-                jda.getTextChannelById(approval).sendMessageFormat("`\nSUB#%s`\nSubmitted by **%s**\n<@&336395133975003138> must approve or deny this submission.", formatted, event.getAuthor().getAsMention()).addFile(sub).queue(m -> {
+                jda.getTextChannelById(approval).sendMessageFormat("`\nSUB#%s`\nSubmitted By **%s**"+getName(event.getMessage().getContentRaw())+"\n\n<@&336395133975003138> must approve or deny this submission.", formatted, event.getAuthor().getAsMention()).addFile(sub).queue(m -> {
                     m.addReaction(jda.getEmoteById(yes)).queue();
                     m.addReaction(jda.getEmoteById(no)).queue();
                     Listener.sessionEmotes++;
@@ -322,6 +474,7 @@ class Listener extends ListenerAdapter {
                 event.getMessage().delete().queue();
                 lockUnlock();
             } catch (Exception exx) {
+                if(!event.getAuthor().isBot()&&!event.getMember().getRoles().contains(Bot.jda.getRoleById("337624653797261313"))) event.getMessage().delete().queue();
                 sendException(exx);
             }
         }
@@ -466,5 +619,4 @@ class Listener extends ListenerAdapter {
                 }
         }
     }
-
 }

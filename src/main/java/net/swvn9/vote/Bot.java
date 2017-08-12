@@ -32,6 +32,7 @@ class Bot {
     static final String no = "341980112465559558";
     static final String veto = "342025850058702848";
 
+    //Used in imgur API auth
     static String imgurRefresh;
     static String imgurClient;
     static String imgurSecret;
@@ -45,13 +46,14 @@ class Bot {
             if (!imgcache.mkdir())
                 System.out.println(imgcache.toString()+" could not be created. Does it already exist?");
 
+        //get the imgur keys from arguments array
         imgurRefresh = args[1];
         imgurClient = args[2];
         imgurSecret = args[3];
 
         //initialise and connect with a new jda object. This object is literally the bot
         //only includes one listener "Listener" for all functions
-        //doesn't need to be buildAsync
+        //doesn't need to be built async
         try {
             jda = new JDABuilder(AccountType.BOT)
                     .setToken(args[0])
