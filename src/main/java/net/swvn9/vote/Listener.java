@@ -357,7 +357,7 @@ class Listener extends ListenerAdapter {
 
         if (event.getMessage().getContentRaw().toLowerCase().startsWith("--l")) {
             for (Role r : event.getMember().getRoles()) {
-                if (r.getId().equals("337624653797261313")||r.getId().equals("336395133975003138")) {
+                if (r.getId().equals("345816087557832704")||r.getId().equals("350379758254555137")) {
                     if(!event.getMessage().getContentRaw().replaceFirst("(?i)--l","").trim().equals("")){
                         manLockUnlock(event.getMember().getEffectiveName(),event.getMessage().getContentRaw().replaceFirst("(?i)--l","").trim());
                     } else {
@@ -370,7 +370,7 @@ class Listener extends ListenerAdapter {
         }
         if (event.getMessage().getContentRaw().startsWith("--t")) {
             for (Role r : event.getMember().getRoles()) {
-                if (r.getId().equals("337624653797261313")) {
+                if (r.getId().equals("345816087557832704")) {
                     Scanner scan = new Scanner(event.getMessage().getContentRaw());
                     scan.next();
                     if (scan.hasNextInt()) {
@@ -384,7 +384,7 @@ class Listener extends ListenerAdapter {
         }
         if (event.getMessage().getContentRaw().equals("--status")) {
             for (Role r : event.getMember().getRoles()) {
-                if (r.getId().equals("337624653797261313")) {
+                if (r.getId().equals("345816087557832704")||r.getId().equals("350379758254555137")) {
                     EmbedBuilder stats = new EmbedBuilder();
                     long uptime = System.nanoTime() - start;
                     long days = TimeUnit.NANOSECONDS.toDays(uptime);
