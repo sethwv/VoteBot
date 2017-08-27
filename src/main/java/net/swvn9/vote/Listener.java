@@ -314,7 +314,7 @@ class Listener extends ListenerAdapter {
         if (event.getAuthor().isBot()) return;
         if (event.getMessage().getContentRaw().equals("--help")) {
             for (Role r : event.getMember().getRoles()) {
-                if (r.getId().equals("337624653797261313")) {
+                if (r.getId().equals("351351559596277760")) {
                     EmbedBuilder help = new EmbedBuilder();
                     help.addField("--t <int>", "View or Set the voting threshold percentage. (int is optional)", false);
                     help.addField("--status", "View the bot's Stats, Uptime, and Thresholds.", false);
@@ -363,14 +363,15 @@ class Listener extends ListenerAdapter {
                     } else {
                         manLockUnlock(event.getMember().getEffectiveName(),"**<#341979061553463306> has been manually locked and will remain so until unlocked by a staff member.**");
                     }
-                    event.getMessage().delete().queue();
+                    event.getMessage().addReaction(Bot.jda.getEmoteById(yes)).queue();
+                    event.getMessage().delete().queueAfter(20,TimeUnit.SECONDS);
                     return;
                 }
             }
         }
         if (event.getMessage().getContentRaw().startsWith("--t")) {
             for (Role r : event.getMember().getRoles()) {
-                if (r.getId().equals("345816087557832704")) {
+                if (r.getId().equals("351351559596277760")) {
                     Scanner scan = new Scanner(event.getMessage().getContentRaw());
                     scan.next();
                     if (scan.hasNextInt()) {
@@ -384,7 +385,7 @@ class Listener extends ListenerAdapter {
         }
         if (event.getMessage().getContentRaw().equals("--status")) {
             for (Role r : event.getMember().getRoles()) {
-                if (r.getId().equals("345816087557832704")||r.getId().equals("350379758254555137")) {
+                if (r.getId().equals("351351559596277760")||r.getId().equals("350379758254555137")) {
                     EmbedBuilder stats = new EmbedBuilder();
                     long uptime = System.nanoTime() - start;
                     long days = TimeUnit.NANOSECONDS.toDays(uptime);
@@ -539,7 +540,7 @@ class Listener extends ListenerAdapter {
                     }
                 } else if (event.getReactionEmote().getEmote().equals(blk)) {
                     for (Role r : event.getMember().getRoles()) {
-                        if (r.getId().equals("337624653797261313")) {
+                        if (r.getId().equals("351351559596277760")) {
                             Pattern id = Pattern.compile("SUB#(\\d{4})");
                             Matcher idFind = id.matcher(message.getContentRaw());
                             while(idFind.find()) logToChannel(idFind.group(0)+" vetoed in "+jda.getTextChannelById(approval).getName()+" by "+event.getMember().getEffectiveName());
@@ -600,7 +601,7 @@ class Listener extends ListenerAdapter {
                     }
                 } else if (event.getReactionEmote().getEmote().equals(blk)) {
                     for (Role r : event.getMember().getRoles()) {
-                        if (r.getId().equals("337624653797261313")) {
+                        if (r.getId().equals("351351559596277760")) {
                             Pattern id = Pattern.compile("SUB#(\\d{4})");
                             Matcher idFind = id.matcher(message.getContentRaw());
                             while(idFind.find()) logToChannel(idFind.group(0)+" vetoed in "+jda.getTextChannelById(voting).getName()+" by "+event.getMember().getEffectiveName());
