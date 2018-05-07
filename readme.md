@@ -1,5 +1,5 @@
 <p align="center">
-<a href="#"><img src="https://u.swvn9.net/2017/FkLFt.png"></a>
+<a href="#"><img src="https://u.swvn.io/2017/FkLFt.png"></a>
 </p>
 <p align="center">
 <a href="https://travis-ci.org/swvn9/VoteBot"><img src="https://travis-ci.org/swvn9/VoteBot.svg?branch=master"></a>
